@@ -1,5 +1,10 @@
+const GEMINI_MODEL = 'gemini-2.0-flash';
+const CONTEXT_TURNS = 10;
+
 // DOM Elements
 const themeToggleBtn = document.getElementById('themeToggleBtn');
+const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+const sidebar = document.getElementById('sidebar');
 const profileList = document.getElementById('profileList');
 const addProfileBtn = document.getElementById('addProfileBtn');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -8,8 +13,10 @@ const chatBox = document.getElementById('chatBox');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const currentProfileName = document.getElementById('currentProfileName');
+const currentSubjectMode = document.getElementById('currentSubjectMode');
+const subjectList = document.getElementById('subjectList');
+const quickActions = document.getElementById('quickActions');
 
-// Modals
 const profileModal = document.getElementById('profileModal');
 const newProfileName = document.getElementById('newProfileName');
 const newProfileGrade = document.getElementById('newProfileGrade');
@@ -26,34 +33,127 @@ let profiles = JSON.parse(localStorage.getItem('aiTutorProfiles')) || [];
 let currentProfileId = localStorage.getItem('aiTutorCurrentProfileId') || null;
 let chatHistory = JSON.parse(localStorage.getItem('aiTutorChatHistory')) || {};
 let apiKey = localStorage.getItem('aiTutorApiKey') || '';
+let currentSubject = localStorage.getItem('aiTutorCurrentSubject') || 'math';
+let isLoading = false;
 
-// Initialize Theme
 const savedTheme = localStorage.getItem('aiTutorTheme') || 'light';
 document.documentElement.setAttribute('data-theme', savedTheme);
 
-// Initialize Marked.js with KaTeX
-// In order to properly render markdown and math, we will render markdown first, then render math.
-// Or wait, auto-render extension from KaTeX is loaded in index.html which renders math on DOM elements!
+function getCurrentProfile() {
+    return profiles.find(p => p.id === currentProfileId) || null;
+}
 
-// Initialization
+function getCurrentGrade() {
+    return getCurrentProfile()?.grade || '중학생';
+}
+
 function init() {
+    const grade = getCurrentGrade();
+    currentSubject = ensureValidSubject(grade, currentSubject);
+    localStorage.setItem('aiTutorCurrentSubject', currentSubject);
+
+    renderSubjects();
     renderProfiles();
-    if (currentProfileId) {
-        selectProfile(currentProfileId);
+    renderQuickActions();
+    updateSubjectUI();
+
+    if (currentProfileId && getCurrentProfile()) {
+        selectProfile(currentProfileId, { skipRender: true });
     } else if (profiles.length > 0) {
-        selectProfile(profiles[0].id);
+        selectProfile(profiles[0].id, { skipRender: true });
     }
 }
 
-// --- Theme Management ---
+// --- Theme ---
 themeToggleBtn.addEventListener('click', () => {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    const newTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('aiTutorTheme', newTheme);
 });
 
-// --- Profile Management ---
+sidebarToggleBtn.addEventListener('click', () => {
+    sidebar.classList.toggle('open');
+});
+
+document.addEventListener('click', (e) => {
+    if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
+        if (!sidebar.contains(e.target) && !sidebarToggleBtn.contains(e.target)) {
+            sidebar.classList.remove('open');
+        }
+    }
+});
+
+// --- Subjects ---
+function renderSubjects() {
+    subjectList.innerHTML = '';
+    const grade = getCurrentGrade();
+    const groups = getSubjectsByCategory(grade);
+
+    if (groups.length === 0) {
+        subjectList.innerHTML = '<p class="subject-hint">프로필을 선택하면 과목이 표시됩니다.</p>';
+        return;
+    }
+
+    groups.forEach(group => {
+        const label = document.createElement('div');
+        label.className = 'subject-category-label';
+        label.textContent = group.label;
+        subjectList.appendChild(label);
+
+        group.subjects.forEach(([key, subject]) => {
+            const el = document.createElement('div');
+            el.className = `subject-selector ${key === currentSubject ? 'active' : ''}`;
+            el.dataset.subject = key;
+            const csatBadge = subject.csat ? '<span class="csat-badge">수능</span>' : '';
+            el.innerHTML = `<span class="icon">${subject.icon}</span><span class="subject-name">${subject.name}</span>${csatBadge}`;
+            el.addEventListener('click', () => selectSubject(key));
+            subjectList.appendChild(el);
+        });
+    });
+}
+
+function selectSubject(key) {
+    currentSubject = key;
+    localStorage.setItem('aiTutorCurrentSubject', key);
+    renderSubjects();
+    updateSubjectUI();
+    renderQuickActions();
+    renderChat();
+}
+
+function updateSubjectUI() {
+    const subject = SUBJECTS[currentSubject];
+    if (!subject) return;
+    currentSubjectMode.textContent = subject.mode;
+    document.title = `일등공신 선생님 - ${subject.name}`;
+}
+
+function renderQuickActions() {
+    const subject = SUBJECTS[currentSubject];
+    if (!subject) return;
+    quickActions.innerHTML = '';
+
+    subject.quickActions.forEach(action => {
+        const btn = document.createElement('button');
+        btn.className = 'quick-action-btn';
+        btn.textContent = action.label;
+        btn.addEventListener('click', () => {
+            if (!currentProfileId) {
+                alert('먼저 프로필을 생성하거나 선택해주세요!');
+                return;
+            }
+            if (action.prompt.endsWith(': ') || action.prompt.endsWith(' ')) {
+                userInput.value = action.prompt;
+                userInput.focus();
+            } else {
+                sendMessage(action.prompt);
+            }
+        });
+        quickActions.appendChild(btn);
+    });
+}
+
+// --- Profiles ---
 function renderProfiles() {
     profileList.innerHTML = '';
     profiles.forEach(profile => {
@@ -61,186 +161,203 @@ function renderProfiles() {
         item.className = `profile-item ${profile.id === currentProfileId ? 'active' : ''}`;
         item.innerHTML = `
             <div class="profile-info">
-                <span class="profile-name">${profile.name}</span>
-                <span class="profile-grade">${profile.grade}</span>
+                <span class="profile-name">${escapeHtml(profile.name)}</span>
+                <span class="profile-grade">${escapeHtml(profile.grade)}</span>
             </div>
             <button class="delete-profile-btn" data-id="${profile.id}">×</button>
         `;
-        
+
         item.addEventListener('click', (e) => {
             if (!e.target.classList.contains('delete-profile-btn')) {
                 selectProfile(profile.id);
             }
         });
-        
+
         item.querySelector('.delete-profile-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             deleteProfile(profile.id);
         });
-        
+
         profileList.appendChild(item);
     });
 }
 
-function selectProfile(id) {
+function selectProfile(id, options = {}) {
     currentProfileId = id;
     localStorage.setItem('aiTutorCurrentProfileId', id);
-    const profile = profiles.find(p => p.id === id);
-    
+    const profile = getCurrentProfile();
+
     if (profile) {
         currentProfileName.textContent = `${profile.name} (${profile.grade})`;
+        currentSubject = ensureValidSubject(profile.grade, currentSubject);
+        localStorage.setItem('aiTutorCurrentSubject', currentSubject);
     }
-    
+
     renderProfiles();
-    renderChat();
+    renderSubjects();
+    renderQuickActions();
+    updateSubjectUI();
+    if (!options.skipRender) renderChat();
+
+    if (window.innerWidth <= 768) sidebar.classList.remove('open');
+}
+
+function deleteProfileChatHistory(profileId) {
+    Object.keys(chatHistory).forEach(key => {
+        if (key.startsWith(`${profileId}_`)) delete chatHistory[key];
+    });
 }
 
 function deleteProfile(id) {
-    if(confirm('이 프로필과 관련된 모든 대화 기록이 삭제됩니다. 계속하시겠습니까?')) {
-        profiles = profiles.filter(p => p.id !== id);
-        delete chatHistory[id];
-        
-        localStorage.setItem('aiTutorProfiles', JSON.stringify(profiles));
-        localStorage.setItem('aiTutorChatHistory', JSON.stringify(chatHistory));
-        
-        if (currentProfileId === id) {
-            currentProfileId = null;
-            localStorage.removeItem('aiTutorCurrentProfileId');
-            currentProfileName.textContent = '프로필을 선택해주세요';
-            chatBox.innerHTML = '';
-        }
-        
-        init();
+    if (!confirm('이 프로필과 관련된 모든 대화 기록이 삭제됩니다. 계속하시겠습니까?')) return;
+
+    profiles = profiles.filter(p => p.id !== id);
+    deleteProfileChatHistory(id);
+
+    localStorage.setItem('aiTutorProfiles', JSON.stringify(profiles));
+    localStorage.setItem('aiTutorChatHistory', JSON.stringify(chatHistory));
+
+    if (currentProfileId === id) {
+        currentProfileId = null;
+        localStorage.removeItem('aiTutorCurrentProfileId');
+        currentProfileName.textContent = '프로필을 선택해주세요';
+        chatBox.innerHTML = '';
     }
+
+    init();
 }
 
-// Profile Modal Events
 addProfileBtn.addEventListener('click', () => {
     newProfileName.value = '';
     profileModal.classList.add('active');
 });
 
-cancelProfileBtn.addEventListener('click', () => {
-    profileModal.classList.remove('active');
-});
+cancelProfileBtn.addEventListener('click', () => profileModal.classList.remove('active'));
 
 saveProfileBtn.addEventListener('click', () => {
     const name = newProfileName.value.trim();
     const grade = newProfileGrade.value;
-    
-    if (name) {
-        const newProfile = {
-            id: Date.now().toString(),
-            name,
-            grade
-        };
-        profiles.push(newProfile);
-        localStorage.setItem('aiTutorProfiles', JSON.stringify(profiles));
-        
-        // Init empty chat history
-        chatHistory[newProfile.id] = [];
-        localStorage.setItem('aiTutorChatHistory', JSON.stringify(chatHistory));
-        
-        selectProfile(newProfile.id);
-        profileModal.classList.remove('active');
-    }
+    if (!name) return;
+
+    const newProfile = { id: Date.now().toString(), name, grade };
+    profiles.push(newProfile);
+    localStorage.setItem('aiTutorProfiles', JSON.stringify(profiles));
+
+    selectProfile(newProfile.id);
+    profileModal.classList.remove('active');
 });
 
-// --- Settings Management ---
+// --- Settings ---
 settingsBtn.addEventListener('click', () => {
     apiKeyInput.value = apiKey;
     settingsModal.classList.add('active');
 });
 
-cancelSettingsBtn.addEventListener('click', () => {
-    settingsModal.classList.remove('active');
-});
+cancelSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
 
 saveSettingsBtn.addEventListener('click', () => {
     apiKey = apiKeyInput.value.trim();
     localStorage.setItem('aiTutorApiKey', apiKey);
     settingsModal.classList.remove('active');
-    if(apiKey) {
-        alert('API 키가 저장되었습니다!');
-    }
+    if (apiKey) alert('API 키가 저장되었습니다!');
 });
 
-// --- Chat Management ---
+// --- Chat ---
+function getChatKey() {
+    return `${currentProfileId}_${currentSubject}`;
+}
+
 function renderChat() {
     chatBox.innerHTML = '';
-    
-    if (!currentProfileId) return;
-    
-    const history = chatHistory[currentProfileId] || [];
-    
-    if (history.length === 0) {
+
+    if (!currentProfileId) {
         chatBox.innerHTML = `
             <div class="welcome-message">
-                <h3>환영합니다! 일등공신 수학 선생님입니다. 📐</h3>
-                <p>문제를 풀어달라고 하거나, 비슷한 문제를 출제해달라고 말해보세요!</p>
+                <h3>환영합니다! 일등공신 AI 튜터입니다. 🎓</h3>
+                <p>좌측에서 프로필을 추가한 뒤 학습을 시작하세요.</p>
             </div>
         `;
         return;
     }
-    
-    history.forEach(msg => {
-        appendMessage(msg.role, msg.content, false);
-    });
-    
+
+    const history = chatHistory[getChatKey()] || [];
+    const subject = SUBJECTS[currentSubject];
+
+    if (!subject || history.length === 0) {
+        const count = getSubjectsForGrade(getCurrentGrade()).length;
+        chatBox.innerHTML = `
+            <div class="welcome-message">
+                <h3>${subject?.icon || '🎓'} ${subject?.name || ''} 선생님입니다!</h3>
+                <p>${subject?.welcome || ''}</p>
+                <p class="welcome-sub">${getCurrentGrade()} · ${count}개 과목 지원</p>
+            </div>
+        `;
+        return;
+    }
+
+    history.forEach(msg => appendMessage(msg.role, msg.content, false));
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 function appendMessage(role, content, save = true) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${role}`;
-    
+
     if (role === 'ai') {
-        // Use marked.js for markdown parsing
         msgDiv.innerHTML = marked.parse(content);
-        // Render Math with KaTeX
-        renderMathInElement(msgDiv, {
-            delimiters: [
-                {left: '$$', right: '$$', display: true},
-                {left: '$', right: '$', display: false},
-                {left: '\\(', right: '\\)', display: false},
-                {left: '\\[', right: '\\]', display: true}
-            ],
-            throwOnError: false
-        });
+        if (typeof renderMathInElement === 'function') {
+            renderMathInElement(msgDiv, {
+                delimiters: [
+                    { left: '$$', right: '$$', display: true },
+                    { left: '$', right: '$', display: false },
+                    { left: '\\(', right: '\\)', display: false },
+                    { left: '\\[', right: '\\]', display: true }
+                ],
+                throwOnError: false
+            });
+        }
     } else {
         msgDiv.textContent = content;
     }
-    
+
     chatBox.appendChild(msgDiv);
     chatBox.scrollTop = chatBox.scrollHeight;
-    
+
     if (save && currentProfileId) {
-        if (!chatHistory[currentProfileId]) chatHistory[currentProfileId] = [];
-        chatHistory[currentProfileId].push({ role, content });
+        const key = getChatKey();
+        if (!chatHistory[key]) chatHistory[key] = [];
+        chatHistory[key].push({ role, content });
         localStorage.setItem('aiTutorChatHistory', JSON.stringify(chatHistory));
     }
 }
 
 clearChatBtn.addEventListener('click', () => {
     if (!currentProfileId) return;
-    
-    if (confirm('현재 프로필의 모든 대화 기록을 삭제하시겠습니까?')) {
-        chatHistory[currentProfileId] = [];
-        localStorage.setItem('aiTutorChatHistory', JSON.stringify(chatHistory));
-        renderChat();
-    }
+    if (!confirm('현재 과목의 대화 기록을 삭제하시겠습니까?')) return;
+
+    chatHistory[getChatKey()] = [];
+    localStorage.setItem('aiTutorChatHistory', JSON.stringify(chatHistory));
+    renderChat();
 });
 
-// --- API Interaction (Gemini) ---
+function setLoading(loading) {
+    isLoading = loading;
+    sendBtn.disabled = loading;
+    userInput.disabled = loading;
+    sendBtn.classList.toggle('loading', loading);
+}
+
+// --- Gemini API ---
 async function sendToGemini(userMessage) {
     if (!apiKey) {
         appendMessage('ai', '⚠️ Google Gemini API 키가 설정되지 않았습니다. 좌측 하단의 "API 설정"에서 키를 입력해주세요.');
         return;
     }
-    
-    const profile = profiles.find(p => p.id === currentProfileId);
-    
-    // Typing indicator
+
+    const profile = getCurrentProfile();
+    const subject = SUBJECTS[currentSubject];
+    if (!profile || !subject) return;
+
     const typingDiv = document.createElement('div');
     typingDiv.className = 'message ai';
     typingDiv.innerHTML = `
@@ -252,75 +369,73 @@ async function sendToGemini(userMessage) {
     `;
     chatBox.appendChild(typingDiv);
     chatBox.scrollTop = chatBox.scrollHeight;
-    
-    // History context
-    const history = chatHistory[currentProfileId] || [];
-    const recentHistory = history.slice(-5).map(m => {
-        return {
-            role: m.role === 'user' ? 'user' : 'model',
-            parts: [{ text: m.content }]
-        }
-    });
 
-    // System prompt behavior (implemented as the first message or context)
-    const systemPrompt = `당신은 ${profile.grade} 대상의 일등공신 수학 선생님입니다. 
-학생이 질문을 하면 곧바로 정답을 알려주지 말고, 친절하고 단계적인 힌트를 주어 스스로 풀 수 있도록 유도하세요. 
-수학 수식은 반드시 LaTeX 형식($ 또는 $$ 사용)으로 작성하세요. 
-학생을 칭찬하고 격려하는 어조를 사용하세요.`;
-    
+    const history = chatHistory[getChatKey()] || [];
+    const recentHistory = history.slice(-CONTEXT_TURNS).map(m => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: m.content }]
+    }));
+
     const requestBody = {
+        systemInstruction: {
+            parts: [{ text: subject.buildPrompt(profile.grade) }]
+        },
         contents: [
-            { role: "user", parts: [{ text: systemPrompt }] },
-            { role: "model", parts: [{ text: "네, 저는 훌륭한 수학 선생님입니다. 준비되었습니다!" }] },
             ...recentHistory,
-            { role: "user", parts: [{ text: userMessage }] }
+            { role: 'user', parts: [{ text: userMessage }] }
         ],
         generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 2048,
+            maxOutputTokens: 2048
         }
     };
 
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
-        });
-        
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            }
+        );
+
         const data = await response.json();
-        
-        chatBox.removeChild(typingDiv); // remove typing indicator
-        
+        chatBox.removeChild(typingDiv);
+
         if (data.error) {
             appendMessage('ai', `⚠️ API 오류: ${data.error.message}`);
-        } else if (data.candidates && data.candidates[0].content) {
-            const aiText = data.candidates[0].content.parts[0].text;
-            appendMessage('ai', aiText);
+        } else if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+            appendMessage('ai', data.candidates[0].content.parts[0].text);
         } else {
             appendMessage('ai', '응답을 받지 못했습니다. 다시 시도해주세요.');
         }
-        
     } catch (error) {
-        chatBox.removeChild(typingDiv);
+        if (typingDiv.parentNode) chatBox.removeChild(typingDiv);
         appendMessage('ai', `⚠️ 네트워크 오류가 발생했습니다: ${error.message}`);
+    } finally {
+        setLoading(false);
     }
 }
 
-// User Input Events
-sendBtn.addEventListener('click', () => {
+function sendMessage(text) {
     if (!currentProfileId) {
         alert('먼저 프로필을 생성하거나 선택해주세요!');
         return;
     }
-    
-    const text = userInput.value.trim();
-    if (text) {
-        appendMessage('user', text);
-        userInput.value = '';
-        sendToGemini(text);
-    }
-});
+    if (!text || isLoading) return;
+
+    const welcome = chatBox.querySelector('.welcome-message');
+    if (welcome) welcome.remove();
+
+    setLoading(true);
+    appendMessage('user', text);
+    userInput.value = '';
+    userInput.style.height = '60px';
+    sendToGemini(text);
+}
+
+sendBtn.addEventListener('click', () => sendMessage(userInput.value.trim()));
 
 userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -329,14 +444,16 @@ userInput.addEventListener('keydown', (e) => {
     }
 });
 
-// Auto-resize textarea
-userInput.addEventListener('input', function() {
+userInput.addEventListener('input', function () {
     this.style.height = 'auto';
-    this.style.height = (this.scrollHeight) + 'px';
-    if(this.value === '') {
-        this.style.height = '60px'; // reset
-    }
+    this.style.height = this.scrollHeight + 'px';
+    if (this.value === '') this.style.height = '60px';
 });
 
-// Start app
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 init();

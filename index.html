@@ -4,18 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>일등공신 선생님 - AI 스터디 비서</title>
-    
-    <!-- KaTeX CSS for Math Rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
-    <!-- Highlight.js for Code Formatting -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
-    <!-- Custom CSS -->
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="light-theme">
+<body>
     <div class="app-container">
-        <!-- Sidebar: Profiles and Settings -->
-        <aside class="sidebar">
+        <button id="sidebarToggleBtn" class="sidebar-toggle" aria-label="메뉴 열기">☰</button>
+
+        <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
                 <h1>🎓 일등공신</h1>
                 <button id="themeToggleBtn" class="icon-btn" title="테마 변경">🌓</button>
@@ -23,18 +20,14 @@
 
             <div class="profile-section">
                 <h3>사용자 프로필</h3>
-                <div id="profileList" class="profile-list">
-                    <!-- Profiles will be injected here -->
-                </div>
+                <div id="profileList" class="profile-list"></div>
                 <button id="addProfileBtn" class="btn primary-btn">+ 새 프로필 추가</button>
             </div>
 
             <div class="subject-section">
-                <h3>현재 과목</h3>
-                <div class="subject-selector active">
-                    <span class="icon">📐</span> 수학
-                </div>
-                <!-- Other subjects will be added later -->
+                <h3>교과 선택</h3>
+                <p class="subject-hint">학년에 맞는 과목이 표시됩니다</p>
+                <div id="subjectList" class="subject-list"></div>
             </div>
 
             <div class="sidebar-footer">
@@ -43,32 +36,30 @@
             </div>
         </aside>
 
-        <!-- Main Chat Area -->
         <main class="chat-container">
             <header class="chat-header">
                 <h2 id="currentProfileName">프로필을 선택해주세요</h2>
-                <p>수학 문제 풀이 및 출제 모드</p>
+                <p id="currentSubjectMode">수학 문제 풀이 및 출제</p>
             </header>
-            
+
+            <div id="quickActions" class="quick-actions"></div>
+
             <div id="chatBox" class="chat-box">
-                <!-- Chat messages will be injected here -->
                 <div class="welcome-message">
-                    <h3>환영합니다! 무엇을 도와드릴까요?</h3>
-                    <p>수학 문제를 물어보거나, 새로운 문제를 출제해달라고 해보세요.</p>
+                    <h3>환영합니다! 일등공신 AI 튜터입니다. 🎓</h3>
+                    <p>좌측에서 프로필을 추가한 뒤 학습을 시작하세요.</p>
                 </div>
             </div>
 
             <div class="input-area">
-                <textarea id="userInput" placeholder="질문이나 풀고 싶은 문제를 입력하세요... (수식 입력 가능)"></textarea>
+                <textarea id="userInput" placeholder="질문이나 풀고 싶은 문제를 입력하세요... (Shift+Enter 줄바꿈)"></textarea>
                 <button id="sendBtn" class="icon-btn send-btn" title="보내기">➤</button>
             </div>
         </main>
     </div>
 
-    <!-- Modals -->
-    <!-- Profile Modal -->
     <div id="profileModal" class="modal">
-        <div class="modal-content glass">
+        <div class="modal-content">
             <h2>새 프로필 추가</h2>
             <input type="text" id="newProfileName" placeholder="이름을 입력하세요">
             <select id="newProfileGrade">
@@ -83,12 +74,14 @@
         </div>
     </div>
 
-    <!-- Settings Modal -->
     <div id="settingsModal" class="modal">
-        <div class="modal-content glass">
+        <div class="modal-content">
             <h2>설정</h2>
-            <p class="help-text">Google Gemini API 키를 입력해주세요. 키는 브라우저에만 안전하게 저장됩니다.</p>
+            <p class="help-text">Google Gemini API 키를 입력해주세요. 키는 브라우저에만 저장됩니다.</p>
             <input type="password" id="apiKeyInput" placeholder="AI API Key (Gemini)">
+            <p class="help-text">
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>에서 무료로 발급할 수 있습니다.
+            </p>
             <div class="modal-actions">
                 <button id="cancelSettingsBtn" class="btn secondary-btn">취소</button>
                 <button id="saveSettingsBtn" class="btn primary-btn">저장</button>
@@ -96,10 +89,10 @@
         </div>
     </div>
 
-    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+    <script src="curriculum.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
