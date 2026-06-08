@@ -52,8 +52,18 @@
             </div>
 
             <div class="input-area">
-                <textarea id="userInput" placeholder="질문이나 풀고 싶은 문제를 입력하세요... (Shift+Enter 줄바꿈)"></textarea>
-                <button id="sendBtn" class="icon-btn send-btn" title="보내기">➤</button>
+                <div class="difficulty-bar">
+                    <span class="difficulty-label">난이도</span>
+                    <div id="difficultySegment" class="difficulty-segment" role="group" aria-label="난이도 선택">
+                        <button type="button" class="difficulty-btn" data-difficulty="쉬움">쉬움</button>
+                        <button type="button" class="difficulty-btn active" data-difficulty="보통">보통</button>
+                        <button type="button" class="difficulty-btn" data-difficulty="어려움">어려움</button>
+                    </div>
+                </div>
+                <div class="input-row">
+                    <textarea id="userInput" placeholder="질문이나 풀고 싶은 문제를 입력하세요... (Shift+Enter 줄바꿈)"></textarea>
+                    <button id="sendBtn" class="icon-btn send-btn" title="보내기">➤</button>
+                </div>
             </div>
         </main>
     </div>

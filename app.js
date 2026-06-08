@@ -34,7 +34,12 @@ let currentProfileId = localStorage.getItem('aiTutorCurrentProfileId') || null;
 let chatHistory = JSON.parse(localStorage.getItem('aiTutorChatHistory')) || {};
 let apiKey = localStorage.getItem('aiTutorApiKey') || '';
 let currentSubject = localStorage.getItem('aiTutorCurrentSubject') || 'math';
+let currentDifficulty = localStorage.getItem('aiTutorDifficulty') || '보통';
 let isLoading = false;
+
+if (!DIFFICULTY_LEVELS.includes(currentDifficulty)) {
+    currentDifficulty = '보통';
+}
 
 const savedTheme = localStorage.getItem('aiTutorTheme') || 'light';
 document.documentElement.setAttribute('data-theme', savedTheme);
@@ -55,6 +60,7 @@ function init() {
     renderSubjects();
     renderProfiles();
     renderQuickActions();
+    renderDifficultyUI();
     updateSubjectUI();
 
     if (currentProfileId && getCurrentProfile()) {
@@ -82,6 +88,22 @@ document.addEventListener('click', (e) => {
         }
     }
 });
+
+// --- Difficulty ---
+function renderDifficultyUI() {
+    document.querySelectorAll('.difficulty-btn').forEach(btn => {
+        const level = btn.dataset.difficulty;
+        btn.classList.toggle('active', level === currentDifficulty);
+        btn.onclick = () => selectDifficulty(level);
+    });
+}
+
+function selectDifficulty(level) {
+    if (!DIFFICULTY_LEVELS.includes(level)) return;
+    currentDifficulty = level;
+    localStorage.setItem('aiTutorDifficulty', level);
+    renderDifficultyUI();
+}
 
 // --- Subjects ---
 function renderSubjects() {
@@ -378,7 +400,7 @@ async function sendToGemini(userMessage) {
 
     const requestBody = {
         systemInstruction: {
-            parts: [{ text: subject.buildPrompt(profile.grade) }]
+            parts: [{ text: subject.buildPrompt(profile.grade, currentDifficulty) }]
         },
         contents: [
             ...recentHistory,

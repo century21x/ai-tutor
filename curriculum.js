@@ -20,6 +20,20 @@ const CATEGORY_LABELS = {
 const TUTOR_RULES = `학생이 질문을 하면 곧바로 정답을 알려주지 말고, 친절하고 단계적인 힌트를 주어 스스로 풀 수 있도록 유도하세요.
 학생을 칭찬하고 격려하는 어조를 사용하세요.`;
 
+const DIFFICULTY_LEVELS = ['쉬움', '보통', '어려움'];
+
+const DIFFICULTY_INSTRUCTIONS = {
+    '쉬움': `현재 난이도: 쉬움. 기초 개념부터 작은 수·간단한 상황으로, 한 번에 한 단계씩.
+전문용어 최소화, 일상 예시 다수. 출제는 기본 개념 확인 수준.`,
+    '보통': `현재 난이도: 보통. 해당 학년 교과서 표준 수준으로 설명·출제. 기본+대표 응용 균형.`,
+    '어려움': `현재 난이도: 어려움. 심화·융합 위주, 여러 개념 결합·함정 포함. 수능/경시 수준 출제,
+풀이 후 일반화·확장 질문 덧붙임.`
+};
+
+function getDifficultyInstruction(difficulty) {
+    return DIFFICULTY_INSTRUCTIONS[difficulty] || DIFFICULTY_INSTRUCTIONS['보통'];
+}
+
 const DEFAULT_ACTIONS = [
     { label: '개념 설명', prompt: '개념을 쉽게 설명해줘. 주제: ' },
     { label: '문제 풀이', prompt: '이 문제를 단계별 힌트와 함께 풀어줘: ' },
@@ -40,9 +54,10 @@ function makeSubject(cfg) {
             ...a,
             prompt: a.prompt.replace('문제', `${name} 문제`).replace('개념', `${name} 개념`)
         })),
-        buildPrompt: (grade) => `당신은 ${grade} 대상의 일등공신 ${name} 선생님입니다.
+        buildPrompt: (grade, difficulty = '보통') => `당신은 ${grade} 대상의 일등공신 ${name} 선생님입니다.
 ${cfg.focus}
-${TUTOR_RULES}${cfg.extra || ''}`
+${TUTOR_RULES}${cfg.extra || ''}
+${getDifficultyInstruction(difficulty)}`
     };
 }
 
