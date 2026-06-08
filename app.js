@@ -326,7 +326,10 @@ function appendMessage(role, content, save = true) {
     msgDiv.className = `message ${role}`;
 
     if (role === 'ai') {
-        msgDiv.innerHTML = marked.parse(content);
+        const parsed = marked.parse(content);
+        msgDiv.innerHTML = typeof DOMPurify !== 'undefined'
+            ? DOMPurify.sanitize(parsed)
+            : parsed;
         if (typeof renderMathInElement === 'function') {
             renderMathInElement(msgDiv, {
                 delimiters: [
