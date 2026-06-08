@@ -15,6 +15,7 @@ const sendBtn = document.getElementById('sendBtn');
 const currentProfileName = document.getElementById('currentProfileName');
 const currentSubjectMode = document.getElementById('currentSubjectMode');
 const subjectList = document.getElementById('subjectList');
+const subjectSearch = document.getElementById('subjectSearch');
 const quickActions = document.getElementById('quickActions');
 
 const profileModal = document.getElementById('profileModal');
@@ -35,6 +36,10 @@ let chatHistory = JSON.parse(localStorage.getItem('aiTutorChatHistory')) || {};
 let apiKey = localStorage.getItem('aiTutorApiKey') || '';
 let currentSubject = localStorage.getItem('aiTutorCurrentSubject') || 'math';
 let currentDifficulty = localStorage.getItem('aiTutorDifficulty') || '보통';
+let subjectSearchQuery = '';
+let collapsedCategories = new Set(
+    JSON.parse(localStorage.getItem('aiTutorCollapsedCategories') || '[]')
+);
 let isLoading = false;
 
 if (!DIFFICULTY_LEVELS.includes(currentDifficulty)) {
@@ -90,12 +95,25 @@ document.addEventListener('click', (e) => {
 });
 
 // --- Difficulty ---
+function updateDifficultySlider() {
+    const segment = document.getElementById('difficultySegment');
+    const slider = document.getElementById('difficultySlider');
+    const active = segment?.querySelector('.difficulty-btn.active');
+    if (!slider || !active || !segment) return;
+
+    const segmentRect = segment.getBoundingClientRect();
+    const activeRect = active.getBoundingClientRect();
+    slider.style.width = `${activeRect.width}px`;
+    slider.style.transform = `translateX(${activeRect.left - segmentRect.left}px)`;
+}
+
 function renderDifficultyUI() {
     document.querySelectorAll('.difficulty-btn').forEach(btn => {
         const level = btn.dataset.difficulty;
         btn.classList.toggle('active', level === currentDifficulty);
         btn.onclick = () => selectDifficulty(level);
     });
+    requestAnimationFrame(updateDifficultySlider);
 }
 
 function selectDifficulty(level) {
@@ -105,32 +123,89 @@ function selectDifficulty(level) {
     renderDifficultyUI();
 }
 
+window.addEventListener('resize', updateDifficultySlider);
+
 // --- Subjects ---
+function toggleAccordionCategory(category) {
+    if (collapsedCategories.has(category)) {
+        collapsedCategories.delete(category);
+    } else {
+        collapsedCategories.add(category);
+    }
+    localStorage.setItem(
+        'aiTutorCollapsedCategories',
+        JSON.stringify([...collapsedCategories])
+    );
+    renderSubjects();
+}
+
 function renderSubjects() {
     subjectList.innerHTML = '';
     const grade = getCurrentGrade();
     const groups = getSubjectsByCategory(grade);
+    const query = subjectSearchQuery.trim().toLowerCase();
 
     if (groups.length === 0) {
         subjectList.innerHTML = '<p class="subject-hint">프로필을 선택하면 과목이 표시됩니다.</p>';
         return;
     }
 
-    groups.forEach(group => {
-        const label = document.createElement('div');
-        label.className = 'subject-category-label';
-        label.textContent = group.label;
-        subjectList.appendChild(label);
+    let hasResults = false;
 
-        group.subjects.forEach(([key, subject]) => {
+    groups.forEach(group => {
+        const filtered = group.subjects.filter(([, subject]) => {
+            if (!query) return true;
+            return (
+                subject.name.toLowerCase().includes(query) ||
+                group.label.toLowerCase().includes(query)
+            );
+        });
+        if (filtered.length === 0) return;
+
+        hasResults = true;
+        const isOpen = query ? true : !collapsedCategories.has(group.category);
+
+        const item = document.createElement('div');
+        item.className = `accordion-item${isOpen ? ' open' : ''}`;
+
+        const header = document.createElement('button');
+        header.type = 'button';
+        header.className = 'accordion-header';
+        header.setAttribute('aria-expanded', String(isOpen));
+        header.innerHTML = `<span>${group.label}</span><span class="accordion-chevron">${isOpen ? '▼' : '▶'}</span>`;
+        header.addEventListener('click', () => toggleAccordionCategory(group.category));
+
+        const panel = document.createElement('div');
+        panel.className = `accordion-panel${isOpen ? '' : ' collapsed'}`;
+
+        const inner = document.createElement('div');
+        inner.className = 'accordion-panel-inner';
+
+        filtered.forEach(([key, subject]) => {
             const el = document.createElement('div');
             el.className = `subject-selector ${key === currentSubject ? 'active' : ''}`;
             el.dataset.subject = key;
             const csatBadge = subject.csat ? '<span class="csat-badge">수능</span>' : '';
-            el.innerHTML = `<span class="icon">${subject.icon}</span><span class="subject-name">${subject.name}</span>${csatBadge}`;
+            el.innerHTML = `<span class="icon">${subject.icon}</span><span class="subject-name">${escapeHtml(subject.name)}</span>${csatBadge}`;
             el.addEventListener('click', () => selectSubject(key));
-            subjectList.appendChild(el);
+            inner.appendChild(el);
         });
+
+        panel.appendChild(inner);
+        item.appendChild(header);
+        item.appendChild(panel);
+        subjectList.appendChild(item);
+    });
+
+    if (!hasResults) {
+        subjectList.innerHTML = '<p class="subject-hint">검색 결과가 없습니다.</p>';
+    }
+}
+
+if (subjectSearch) {
+    subjectSearch.addEventListener('input', (e) => {
+        subjectSearchQuery = e.target.value;
+        renderSubjects();
     });
 }
 

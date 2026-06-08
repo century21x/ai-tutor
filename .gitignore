@@ -1,0 +1,6 @@
+# Claude Code local config (preview launch.json 등)
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
