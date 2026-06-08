@@ -868,3 +868,200 @@ h3 {
         max-width: 92%;
     }
 }
+
+/* ── Kids 입력: 도구 버튼 (손글씨·음성) ── */
+.header-tools {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+#fontSizeBtn {
+    font-size: 0.95rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+#fontSizeBtn.active {
+    background: var(--accent);
+    color: var(--accent-text);
+}
+
+.input-tool-btn {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 12px;
+    margin-bottom: 3px;
+    font-size: 1.2rem;
+    transition: border-color 0.2s, background-color 0.2s, transform 0.2s;
+}
+
+.input-tool-btn:hover {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.08);
+}
+
+#voiceBtn.listening {
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.12);
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45); }
+    50% { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+}
+
+/* ── 빠른 입력 칩 ── */
+.quick-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.quick-chip {
+    padding: 7px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.2s, background-color 0.2s, color 0.2s;
+}
+
+.quick-chip:hover {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.08);
+    color: var(--accent);
+}
+
+/* ── 손글씨 패널 ── */
+.handwriting-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.handwriting-panel.hidden {
+    display: none;
+}
+
+.handwriting-canvas {
+    width: 100%;
+    height: 200px;
+    background: #ffffff;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    touch-action: none;
+    cursor: crosshair;
+    display: block;
+}
+
+.handwriting-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.hw-hint {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-right: auto;
+}
+
+.hw-btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.2s, background-color 0.2s;
+}
+
+.hw-btn:hover {
+    border-color: var(--accent);
+}
+
+.hw-send {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
+.hw-send:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+.handwriting-img {
+    max-width: 100%;
+    border-radius: 8px;
+    background: #ffffff;
+    display: block;
+}
+
+/* ── 읽어주기 버튼 ── */
+.read-aloud-btn {
+    margin-top: 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.2s, border-color 0.2s, background-color 0.2s;
+}
+
+.read-aloud-btn:hover {
+    opacity: 1;
+    border-color: var(--accent);
+}
+
+.read-aloud-btn.speaking {
+    opacity: 1;
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.12);
+}
+
+/* ── 큰 글씨 모드 ── */
+html[data-fontsize="large"] .message {
+    font-size: 1.15rem;
+}
+
+html[data-fontsize="large"] #userInput {
+    font-size: 1.1rem;
+}
+
+html[data-fontsize="large"] .quick-chip,
+html[data-fontsize="large"] .quick-action-btn {
+    font-size: 1rem;
+}
+
+html[data-fontsize="large"] .subject-selector {
+    font-size: 1rem;
+}
+
+html[data-fontsize="large"] .difficulty-btn {
+    font-size: 0.95rem;
+}

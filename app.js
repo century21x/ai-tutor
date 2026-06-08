@@ -1,5 +1,8 @@
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const CONTEXT_TURNS = 10;
+const HANDWRITING_PROMPT = `학생이 손으로 쓴 질문 또는 문제입니다. 내용을 읽고 도와주세요.
+글씨가 불분명하면 먼저 "이렇게 쓴 게 맞나요?"라고 추측한 내용을 짧게 확인한 뒤 진행하세요.
+숫자와 수식은 특히 주의해서 읽으세요.`;
 
 // DOM Elements
 const themeToggleBtn = document.getElementById('themeToggleBtn');
@@ -17,6 +20,12 @@ const currentSubjectMode = document.getElementById('currentSubjectMode');
 const subjectList = document.getElementById('subjectList');
 const subjectSearch = document.getElementById('subjectSearch');
 const quickActions = document.getElementById('quickActions');
+const quickChips = document.getElementById('quickChips');
+const fontSizeBtn = document.getElementById('fontSizeBtn');
+const voiceBtn = document.getElementById('voiceBtn');
+const handwritingToggleBtn = document.getElementById('handwritingToggleBtn');
+const handwritingPanel = document.getElementById('handwritingPanel');
+const hwCanvas = document.getElementById('handwritingCanvas');
 
 const profileModal = document.getElementById('profileModal');
 const newProfileName = document.getElementById('newProfileName');
@@ -48,6 +57,9 @@ if (!DIFFICULTY_LEVELS.includes(currentDifficulty)) {
 
 const savedTheme = localStorage.getItem('aiTutorTheme') || 'light';
 document.documentElement.setAttribute('data-theme', savedTheme);
+
+let fontSize = localStorage.getItem('aiTutorFontSize') || 'normal';
+document.documentElement.setAttribute('data-fontsize', fontSize);
 
 function getCurrentProfile() {
     return profiles.find(p => p.id === currentProfileId) || null;
@@ -392,11 +404,11 @@ function renderChat() {
         return;
     }
 
-    history.forEach(msg => appendMessage(msg.role, msg.content, false));
+    history.forEach(msg => appendMessage(msg.role, msg.content, false, msg.image));
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-function appendMessage(role, content, save = true) {
+function appendMessage(role, content, save = true, image = null) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${role}`;
 
@@ -416,6 +428,13 @@ function appendMessage(role, content, save = true) {
                 throwOnError: false
             });
         }
+        msgDiv.appendChild(createReadAloudBtn(content));
+    } else if (image) {
+        const img = document.createElement('img');
+        img.src = image;
+        img.className = 'handwriting-img';
+        img.alt = '손글씨 질문';
+        msgDiv.appendChild(img);
     } else {
         msgDiv.textContent = content;
     }
@@ -426,8 +445,17 @@ function appendMessage(role, content, save = true) {
     if (save && currentProfileId) {
         const key = getChatKey();
         if (!chatHistory[key]) chatHistory[key] = [];
-        chatHistory[key].push({ role, content });
-        localStorage.setItem('aiTutorChatHistory', JSON.stringify(chatHistory));
+        const entry = { role, content };
+        if (image) entry.image = image;
+        chatHistory[key].push(entry);
+        try {
+            localStorage.setItem('aiTutorChatHistory', JSON.stringify(chatHistory));
+        } catch (err) {
+            if (entry.image) {
+                delete entry.image;
+                localStorage.setItem('aiTutorChatHistory', JSON.stringify(chatHistory));
+            }
+        }
     }
 }
 
@@ -448,7 +476,7 @@ function setLoading(loading) {
 }
 
 // --- Gemini API ---
-async function sendToGemini(userMessage) {
+async function sendToGemini(userMessage, imageBase64 = null) {
     if (!apiKey) {
         appendMessage('ai', '⚠️ Google Gemini API 키가 설정되지 않았습니다. 좌측 하단의 "API 설정"에서 키를 입력해주세요.');
         return;
@@ -476,13 +504,17 @@ async function sendToGemini(userMessage) {
         parts: [{ text: m.content }]
     }));
 
+    const userParts = imageBase64
+        ? [{ text: HANDWRITING_PROMPT }, { inlineData: { mimeType: 'image/png', data: imageBase64 } }]
+        : [{ text: userMessage }];
+
     const requestBody = {
         systemInstruction: {
             parts: [{ text: subject.buildPrompt(profile.grade, currentDifficulty) }]
         },
         contents: [
             ...recentHistory,
-            { role: 'user', parts: [{ text: userMessage }] }
+            { role: 'user', parts: userParts }
         ],
         generationConfig: {
             temperature: 0.7,
@@ -555,5 +587,215 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// ── 접근성: 큰 글씨 ──
+if (fontSizeBtn) {
+    fontSizeBtn.classList.toggle('active', fontSize === 'large');
+    fontSizeBtn.addEventListener('click', () => {
+        fontSize = fontSize === 'large' ? 'normal' : 'large';
+        document.documentElement.setAttribute('data-fontsize', fontSize);
+        localStorage.setItem('aiTutorFontSize', fontSize);
+        fontSizeBtn.classList.toggle('active', fontSize === 'large');
+    });
+}
+
+// ── 빠른 입력 칩 ──
+const QUICK_CHIPS = ['쉽게 설명해줘', '예시 들어줘', '다시 설명해줘', '힌트 줘'];
+function renderQuickChips() {
+    if (!quickChips) return;
+    quickChips.innerHTML = '';
+    QUICK_CHIPS.forEach(text => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'quick-chip';
+        chip.textContent = text;
+        chip.addEventListener('click', () => sendMessage(text));
+        quickChips.appendChild(chip);
+    });
+}
+renderQuickChips();
+
+// ── 읽어주기 (TTS) ──
+function createReadAloudBtn(content) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'read-aloud-btn';
+    btn.title = '읽어주기';
+    btn.textContent = '🔊';
+    btn.addEventListener('click', () => toggleReadAloud(content, btn));
+    return btn;
+}
+function toggleReadAloud(content, btn) {
+    if (!('speechSynthesis' in window)) {
+        alert('이 브라우저는 읽어주기를 지원하지 않습니다.');
+        return;
+    }
+    const wasSpeaking = btn.classList.contains('speaking');
+    speechSynthesis.cancel();
+    document.querySelectorAll('.read-aloud-btn.speaking').forEach(b => b.classList.remove('speaking'));
+    if (wasSpeaking) return;
+
+    const plain = content.replace(/[#*`_>~]/g, '').replace(/\$+/g, ' ');
+    const utter = new SpeechSynthesisUtterance(plain);
+    utter.lang = 'ko-KR';
+    utter.onend = () => btn.classList.remove('speaking');
+    utter.onerror = () => btn.classList.remove('speaking');
+    btn.classList.add('speaking');
+    speechSynthesis.speak(utter);
+}
+
+// ── 음성 입력 (Web Speech API) ──
+(function setupVoice() {
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec || !voiceBtn) {
+        if (voiceBtn) voiceBtn.style.display = 'none';
+        return;
+    }
+    const recognition = new SpeechRec();
+    recognition.lang = 'ko-KR';
+    recognition.interimResults = true;
+    recognition.continuous = false;
+    let recognizing = false;
+    let baseText = '';
+    recognition.onstart = () => { recognizing = true; voiceBtn.classList.add('listening'); };
+    recognition.onend = () => { recognizing = false; voiceBtn.classList.remove('listening'); };
+    recognition.onerror = (e) => {
+        recognizing = false;
+        voiceBtn.classList.remove('listening');
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+            alert('마이크 권한이 필요합니다. 브라우저 설정에서 허용해주세요.');
+        }
+    };
+    recognition.onresult = (e) => {
+        let txt = '';
+        for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+        userInput.value = (baseText + txt).trim();
+        userInput.dispatchEvent(new Event('input'));
+    };
+    voiceBtn.addEventListener('click', () => {
+        if (recognizing) { recognition.stop(); return; }
+        baseText = userInput.value ? userInput.value.trim() + ' ' : '';
+        try { recognition.start(); } catch (_) {}
+    });
+})();
+
+// ── 손글씨 입력 (canvas → Gemini 멀티모달) ──
+const hwCtx = hwCanvas ? hwCanvas.getContext('2d') : null;
+let hwStrokes = [];
+let hwCurrentStroke = null;
+let hwDrawing = false;
+
+function hwSetup() {
+    if (!hwCanvas || !hwCtx) return;
+    const rect = hwCanvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    hwCanvas.width = Math.round(rect.width * dpr);
+    hwCanvas.height = Math.round(rect.height * dpr);
+    hwCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    hwRedraw();
+}
+function hwRedraw() {
+    if (!hwCtx) return;
+    const rect = hwCanvas.getBoundingClientRect();
+    hwCtx.clearRect(0, 0, rect.width, rect.height);
+    hwCtx.fillStyle = '#ffffff';
+    hwCtx.fillRect(0, 0, rect.width, rect.height);
+    hwCtx.strokeStyle = '#1f2937';
+    hwCtx.lineCap = 'round';
+    hwCtx.lineJoin = 'round';
+    hwStrokes.forEach(stroke => {
+        for (let i = 1; i < stroke.length; i++) {
+            hwCtx.beginPath();
+            hwCtx.lineWidth = stroke[i].w;
+            hwCtx.moveTo(stroke[i - 1].x, stroke[i - 1].y);
+            hwCtx.lineTo(stroke[i].x, stroke[i].y);
+            hwCtx.stroke();
+        }
+    });
+}
+function hwLineWidth(e) {
+    if (e.pointerType === 'pen' && e.pressure > 0) return 1.5 + e.pressure * 4.5;
+    return 3;
+}
+function hwPos(e) {
+    const rect = hwCanvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+if (hwCanvas && hwCtx) {
+    hwCanvas.addEventListener('pointerdown', (e) => {
+        hwDrawing = true;
+        try { hwCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+        const p = hwPos(e);
+        hwCurrentStroke = [{ x: p.x, y: p.y, w: hwLineWidth(e) }];
+        hwStrokes.push(hwCurrentStroke);
+        e.preventDefault();
+    });
+    hwCanvas.addEventListener('pointermove', (e) => {
+        if (!hwDrawing || !hwCurrentStroke) return;
+        const p = hwPos(e);
+        const w = hwLineWidth(e);
+        const last = hwCurrentStroke[hwCurrentStroke.length - 1];
+        hwCurrentStroke.push({ x: p.x, y: p.y, w });
+        hwCtx.strokeStyle = '#1f2937';
+        hwCtx.lineCap = 'round';
+        hwCtx.lineJoin = 'round';
+        hwCtx.beginPath();
+        hwCtx.lineWidth = w;
+        hwCtx.moveTo(last.x, last.y);
+        hwCtx.lineTo(p.x, p.y);
+        hwCtx.stroke();
+        e.preventDefault();
+    });
+    const hwEnd = () => { hwDrawing = false; hwCurrentStroke = null; };
+    hwCanvas.addEventListener('pointerup', hwEnd);
+    hwCanvas.addEventListener('pointercancel', hwEnd);
+    hwCanvas.addEventListener('pointerleave', hwEnd);
+}
+function hwOpen() {
+    if (!handwritingPanel) return;
+    handwritingPanel.classList.remove('hidden');
+    requestAnimationFrame(hwSetup);
+}
+function hwClose() { if (handwritingPanel) handwritingPanel.classList.add('hidden'); }
+function hwClear() { hwStrokes = []; hwRedraw(); }
+function hwUndo() { hwStrokes.pop(); hwRedraw(); }
+function hwExport() {
+    const maxW = 800;
+    const scale = Math.min(1, maxW / hwCanvas.width);
+    const off = document.createElement('canvas');
+    off.width = Math.round(hwCanvas.width * scale);
+    off.height = Math.round(hwCanvas.height * scale);
+    const octx = off.getContext('2d');
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0, 0, off.width, off.height);
+    octx.drawImage(hwCanvas, 0, 0, off.width, off.height);
+    return off.toDataURL('image/png');
+}
+function sendHandwriting(dataUrl) {
+    const welcome = chatBox.querySelector('.welcome-message');
+    if (welcome) welcome.remove();
+    setLoading(true);
+    appendMessage('user', '✏️ 손글씨 질문', true, dataUrl);
+    sendToGemini('✏️ 손글씨 질문', dataUrl.split(',')[1]);
+}
+function hwSubmit() {
+    if (hwStrokes.length === 0) { alert('먼저 손으로 써주세요 ✏️'); return; }
+    if (!currentProfileId) { alert('먼저 프로필을 생성하거나 선택해주세요!'); return; }
+    if (isLoading) return;
+    const dataUrl = hwExport();
+    hwClear();
+    hwClose();
+    sendHandwriting(dataUrl);
+}
+if (handwritingToggleBtn) {
+    handwritingToggleBtn.addEventListener('click', () => {
+        if (!currentProfileId) { alert('먼저 프로필을 생성하거나 선택해주세요!'); return; }
+        if (handwritingPanel.classList.contains('hidden')) hwOpen(); else hwClose();
+    });
+}
+document.getElementById('hwUndoBtn')?.addEventListener('click', hwUndo);
+document.getElementById('hwClearBtn')?.addEventListener('click', hwClear);
+document.getElementById('hwCloseBtn')?.addEventListener('click', hwClose);
+document.getElementById('hwSendBtn')?.addEventListener('click', hwSubmit);
 
 init();

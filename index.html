@@ -16,7 +16,10 @@
         <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
                 <h1>🎓 일등공신</h1>
-                <button id="themeToggleBtn" class="icon-btn" title="테마 변경">🌓</button>
+                <div class="header-tools">
+                    <button id="fontSizeBtn" class="icon-btn" title="큰 글씨">A+</button>
+                    <button id="themeToggleBtn" class="icon-btn" title="테마 변경">🌓</button>
+                </div>
             </div>
 
             <div class="profile-section">
@@ -56,6 +59,17 @@
             </div>
 
             <div class="input-area">
+                <div id="quickChips" class="quick-chips"></div>
+                <div id="handwritingPanel" class="handwriting-panel hidden">
+                    <canvas id="handwritingCanvas" class="handwriting-canvas"></canvas>
+                    <div class="handwriting-controls">
+                        <span class="hw-hint">✏️ 여기에 손으로 써보세요</span>
+                        <button type="button" id="hwUndoBtn" class="hw-btn" title="되돌리기">↶</button>
+                        <button type="button" id="hwClearBtn" class="hw-btn">지우기</button>
+                        <button type="button" id="hwCloseBtn" class="hw-btn">닫기</button>
+                        <button type="button" id="hwSendBtn" class="hw-btn hw-send">전송 ➤</button>
+                    </div>
+                </div>
                 <div class="difficulty-bar">
                     <span class="difficulty-label">난이도</span>
                     <div id="difficultySegment" class="difficulty-segment" role="group" aria-label="난이도 선택">
@@ -66,6 +80,8 @@
                     </div>
                 </div>
                 <div class="input-row">
+                    <button type="button" id="handwritingToggleBtn" class="icon-btn input-tool-btn" title="손글씨 입력">✏️</button>
+                    <button type="button" id="voiceBtn" class="icon-btn input-tool-btn" title="음성 입력">🎤</button>
                     <textarea id="userInput" placeholder="질문이나 풀고 싶은 문제를 입력하세요... (Shift+Enter 줄바꿈)"></textarea>
                     <button id="sendBtn" class="icon-btn send-btn" title="보내기">➤</button>
                 </div>
